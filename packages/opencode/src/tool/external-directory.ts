@@ -12,7 +12,29 @@ type Options = {
 }
 
 export async function assertExternalDirectory(ctx: Tool.Context, target?: string, options?: Options) {
-  return
+  if (!target) return
+
+  if (options?.bypass) return
+
+  const full = process.platform === "win32" ? AppFileSystem.normalizePath(target) : target
+  if (Instance.containsPath(full)) return
+
+  const kind = options?.kind ?? "file"
+  const dir = kind === "directory" ? full : path.dirname(full)
+  const glob =
+    process.platform === "win32"
+      ? AppFileSystem.normalizePathPattern(path.join(dir, "*"))
+      : path.join(dir, "*").replaceAll("\\", "/")
+
+  await ctx.ask({
+    permission: "external_directory",
+    patterns: [glob],
+    always: [glob],
+    metadata: {
+      filepath: full,
+      parentDir: dir,
+    },
+  })
 }
 
 export const assertExternalDirectoryEffect = Effect.fn("Tool.assertExternalDirectory")(function* (

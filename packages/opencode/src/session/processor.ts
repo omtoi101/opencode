@@ -186,6 +186,31 @@ export namespace SessionProcessor {
                   : value.providerMetadata,
               } satisfies MessageV2.ToolPart)
 
+              const parts = MessageV2.parts(ctx.assistantMessage.id)
+              const recentParts = parts.slice(-DOOM_LOOP_THRESHOLD)
+
+              if (
+                recentParts.length !== DOOM_LOOP_THRESHOLD ||
+                !recentParts.every(
+                  (part) =>
+                    part.type === "tool" &&
+                    part.tool === value.toolName &&
+                    part.state.status !== "pending" &&
+                    JSON.stringify(part.state.input) === JSON.stringify(value.input),
+                )
+              ) {
+                return
+              }
+
+              const agent = yield* agents.get(ctx.assistantMessage.agent)
+              yield* permission.ask({
+                permission: "doom_loop",
+                patterns: [value.toolName],
+                sessionID: ctx.assistantMessage.sessionID,
+                metadata: { tool: value.toolName, input: value.input },
+                always: [value.toolName],
+                ruleset: agent.permission,
+              })
               return
             }
 

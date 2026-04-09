@@ -165,7 +165,40 @@ export namespace Permission {
       )
 
       const ask = Effect.fn("Permission.ask")(function* (input: z.infer<typeof AskInput>) {
-        return
+        const { approved, pending } = yield* InstanceState.get(state)
+        const { ruleset, ...request } = input
+        let needsAsk = false
+
+        for (const pattern of request.patterns) {
+          const rule = evaluate(request.permission, pattern, ruleset, approved)
+          log.info("evaluated", { permission: request.permission, pattern, action: rule })
+          if (rule.action === "deny") {
+            return yield* new DeniedError({
+              ruleset: ruleset.filter((rule) => Wildcard.match(request.permission, rule.permission)),
+            })
+          }
+          if (rule.action === "allow") continue
+          needsAsk = true
+        }
+
+        if (!needsAsk) return
+
+        const id = request.id ?? PermissionID.ascending()
+        const info: Request = {
+          id,
+          ...request,
+        }
+        log.info("asking", { id, permission: info.permission, patterns: info.patterns })
+
+        const deferred = yield* Deferred.make<void, RejectedError | CorrectedError>()
+        pending.set(id, { info, deferred })
+        yield* bus.publish(Event.Asked, info)
+        return yield* Effect.ensuring(
+          Deferred.await(deferred),
+          Effect.sync(() => {
+            pending.delete(id)
+          }),
+        )
       })
 
       const reply = Effect.fn("Permission.reply")(function* (input: z.infer<typeof ReplyInput>) {
@@ -264,7 +297,14 @@ export namespace Permission {
   const EDIT_TOOLS = ["edit", "write", "apply_patch", "multiedit"]
 
   export function disabled(tools: string[], ruleset: Ruleset): Set<string> {
-    return new Set<string>()
+    const result = new Set<string>()
+    for (const tool of tools) {
+      const permission = EDIT_TOOLS.includes(tool) ? "edit" : tool
+      const rule = ruleset.findLast((rule) => Wildcard.match(permission, rule.permission))
+      if (!rule) continue
+      if (rule.pattern === "*" && rule.action === "deny") result.add(tool)
+    }
+    return result
   }
 
   export const defaultLayer = layer.pipe(Layer.provide(Bus.layer))

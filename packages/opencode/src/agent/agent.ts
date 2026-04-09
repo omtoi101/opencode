@@ -85,6 +85,21 @@ export namespace Agent {
 
           const defaults = Permission.fromConfig({
             "*": "allow",
+            doom_loop: "ask",
+            external_directory: {
+              "*": "ask",
+              ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
+            },
+            question: "deny",
+            plan_enter: "deny",
+            plan_exit: "deny",
+            // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
+            read: {
+              "*": "allow",
+              "*.env": "ask",
+              "*.env.*": "ask",
+              "*.env.example": "allow",
+            },
           })
 
           const user = Permission.fromConfig(cfg.permission ?? {})
@@ -107,9 +122,25 @@ export namespace Agent {
             },
             plan: {
               name: "plan",
-              description: "Plan mode.",
+              description: "Plan mode. Disallows all edit tools.",
               options: {},
-              permission: Permission.merge(defaults, user),
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  question: "allow",
+                  plan_exit: "allow",
+                  external_directory: {
+                    [path.join(Global.Path.data, "plans", "*")]: "allow",
+                  },
+                  edit: {
+                    "*": "deny",
+                    [path.join(".opencode", "plans", "*.md")]: "allow",
+                    [path.relative(Instance.worktree, path.join(Global.Path.data, path.join("plans", "*.md")))]:
+                      "allow",
+                  },
+                }),
+                user,
+              ),
               mode: "primary",
               native: true,
             },
@@ -129,7 +160,25 @@ export namespace Agent {
             },
             explore: {
               name: "explore",
-              permission: Permission.merge(defaults, user),
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  "*": "deny",
+                  grep: "allow",
+                  glob: "allow",
+                  list: "allow",
+                  bash: "allow",
+                  webfetch: "allow",
+                  websearch: "allow",
+                  codesearch: "allow",
+                  read: "allow",
+                  external_directory: {
+                    "*": "ask",
+                    ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
+                  },
+                }),
+                user,
+              ),
               description: `Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. "src/components/**/*.tsx"), search code for keywords (eg. "API endpoints"), or answer questions about the codebase (eg. "how do API endpoints work?"). When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.`,
               prompt: PROMPT_EXPLORE,
               options: {},
@@ -142,7 +191,13 @@ export namespace Agent {
               native: true,
               hidden: true,
               prompt: PROMPT_COMPACTION,
-              permission: Permission.merge(defaults, user),
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  "*": "deny",
+                }),
+                user,
+              ),
               options: {},
             },
             title: {
@@ -152,7 +207,13 @@ export namespace Agent {
               native: true,
               hidden: true,
               temperature: 0.5,
-              permission: Permission.merge(defaults, user),
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  "*": "deny",
+                }),
+                user,
+              ),
               prompt: PROMPT_TITLE,
             },
             summary: {
@@ -161,7 +222,13 @@ export namespace Agent {
               options: {},
               native: true,
               hidden: true,
-              permission: Permission.merge(defaults, user),
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  "*": "deny",
+                }),
+                user,
+              ),
               prompt: PROMPT_SUMMARY,
             },
           }

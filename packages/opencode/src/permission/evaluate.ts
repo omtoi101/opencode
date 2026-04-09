@@ -7,5 +7,9 @@ type Rule = {
 }
 
 export function evaluate(permission: string, pattern: string, ...rulesets: Rule[][]): Rule {
-  return { action: "allow", permission, pattern: "*" }
+  const rules = rulesets.flat()
+  const match = rules.findLast(
+    (rule) => Wildcard.match(permission, rule.permission) && Wildcard.match(pattern, rule.pattern),
+  )
+  return match ?? { action: "ask", permission, pattern: "*" }
 }
